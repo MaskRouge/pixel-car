@@ -1,0 +1,62 @@
+{
+    "activeFile": "map1.tmx",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "fileStates": {
+        "Buildings.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1
+        },
+        "RPG Nature Tileset.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "Roads_and_tracks_SpriteSheet.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1
+        },
+        "grass.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "image.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "map1.tmx": {
+            "scale": 5.5,
+            "selectedLayer": 3,
+            "viewCenter": {
+                "x": 464.6363636363636,
+                "y": 128
+            }
+        },
+        "road_line.tsx": {
+            "scaleInDock": 1
+        },
+        "road_objects.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1
+        },
+        "road_turn.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "sand.tsx": {
+            "scaleInDock": 1
+        }
+    },
+    "openFiles": [
+        "image.tsx",
+        "map1.tmx"
+    ],
+    "project": "sans titre.tiled-project",
+    "recentFiles": [
+        "image.tsx",
+        "map1.tmx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.transparentColor": "#000000",
+    "tileset.useTransparentColor": true
+}
