@@ -1,8 +1,8 @@
 import pygame
 import sys
 
-# Importation du jeu
-from game import Game
+# Importation du menu de sélection de circuits
+from menu_1 import Menu
 
 def draw_text(text, font, color, surface, x, y):
     textobj = font.render(text, True, color)
@@ -35,37 +35,37 @@ def main_menu():
     button_quit_x = WIDTH // 2 - button_width // 2
     button_quit_y = 520
 
-    button_play = pygame.Rect(button_play_x, button_play_y, button_width, button_height)  # Position du bouton "Jouer"
-    button_quit = pygame.Rect(button_quit_x, button_quit_y, button_width, button_height)  # Position du bouton "Quitter"
+    button_play = pygame.Rect(button_play_x, button_play_y, button_width, button_height)
+    button_quit = pygame.Rect(button_quit_x, button_quit_y, button_width, button_height)
 
     running = True
     while running:
-        screen.blit(background, (0, 0))  # Afficher l'image de fond
+        screen.blit(background, (0, 0))
 
         # Dessiner les boutons
-        draw_text('Jouer', font, ORANGE, screen, WIDTH // 2, button_play_y + button_height // 2)  # Texte centré sur le bouton "Jouer"
-        draw_text('Quitter', font, ORANGE, screen, WIDTH // 2, button_quit_y + button_height // 2)  # Texte centré sur le bouton "Quitter"
+        draw_text('Jouer', font, ORANGE, screen, WIDTH // 2, button_play_y + button_height // 2)
+        draw_text('Quitter', font, ORANGE, screen, WIDTH // 2, button_quit_y + button_height // 2)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Clique gauche
-                    if button_play.collidepoint(event.pos):
-                        running = False  # Fermer le menu pour lancer le jeu
-                    if button_quit.collidepoint(event.pos):
-                        pygame.quit()
-                        sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Clique gauche
+                if button_play.collidepoint(event.pos):
+                    pygame.quit()
+                    menu = Menu()         # création du menu circuits
+                    menu.main_menu()      # lancer le menu circuits
+                    sys.exit()
+
+                if button_quit.collidepoint(event.pos):
+                    pygame.quit()
+                    sys.exit()
 
         pygame.display.flip()
 
     pygame.quit()
 
-def main():  # Ajout de la fonction main
+def main():
     main_menu()
-    game = Game()
-    game.run()
 
 if __name__ == '__main__':
-    main()  # Appel de la fonction main
-
+    main()
