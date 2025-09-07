@@ -6,37 +6,57 @@ class Player(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
 
-        # Charger sprite sheet
+        # Charger sprite sheet avec transparence
         self.sprite_sheet = pygame.image.load('image/Mclaren.png').convert_alpha()
 
-        # Image originale avec transparence
-        self.original_image = self.get_image(0, 32)
+        # Extraire seulement la voiture (64x64)
+        self.original_image = self.get_image(0, 0, 64, 64)
 
-        # Pré-zoom pour améliorer la rotation (x4)
-        self.zoomed_image = pygame.transform.smoothscale(self.original_image, (128, 128))
+        # Préparer les images pré-rotées tous les 15°
+        self.images = {}
+        for a in range(0, 360, 15):
+            img = pygame.transform.rotate(self.original_image, a)
+            img.set_colorkey((0, 0, 0))
+            self.images[a] = img
 
-        self.image = self.original_image.copy()
-        self.rect = self.image.get_rect()
+        # Position et rect
         self.position = [x, y]
-
-        # Collision "feet"
+        self.rect = self.images[0].get_rect(center=self.position)
         self.feet = pygame.Rect(0, 0, self.rect.width, 32)
         self.old_position = self.position.copy()
 
-        # Physique voiture
+        # Physique
         self.velocity = 0
         self.acceleration = 0.2
         self.friction = 0.05
-        self.max_speed = 6
+        self.normal_speed = 7       # vitesse normale
+        self.max_speed = self.normal_speed
+        self.drs_speed = 18         # vitesse avec DRS
+        self.rain_penalty = 1       # malus pluie (-1 unité ≈ 4 sec/tour)
         self.angle = 0
         self.turn_speed = 3
         self.drift_factor = 0.9
 
+        # DRS
+        self.drs_active = False
+
+        # Chrono
         self.in_chrono_zone = False
 
+        # Image actuelle
+        self.image = self.images[0]
+
+    # Extraire l'image depuis la sprite sheet
+    def get_image(self, x, y, width, height):
+        image = pygame.Surface((width, height), pygame.SRCALPHA)
+        image.blit(self.sprite_sheet, (0, 0), (x, y, width, height))
+        return image
+
+    # Sauvegarder position précédente
     def save_position(self):
         self.old_position = self.position.copy()
 
+    # Mouvement avant/arrière
     def move_forward(self):
         self.velocity += self.acceleration
         if self.velocity > self.max_speed:
@@ -47,6 +67,7 @@ class Player(pygame.sprite.Sprite):
         if self.velocity < -self.max_speed / 2:
             self.velocity = -self.max_speed / 2
 
+    # Rotation
     def turn_left(self):
         if self.velocity != 0:
             self.angle += self.turn_speed * (-1 if self.velocity > 0 else 1)
@@ -55,6 +76,7 @@ class Player(pygame.sprite.Sprite):
         if self.velocity != 0:
             self.angle -= self.turn_speed * (-1 if self.velocity > 0 else 1)
 
+    # Mise à jour du sprite
     def update(self):
         # Appliquer friction
         if self.velocity > 0:
@@ -73,24 +95,37 @@ class Player(pygame.sprite.Sprite):
         self.position[0] += dx * self.drift_factor
         self.position[1] += dy * self.drift_factor
 
-        self.rect.topleft = self.position
+        # Mettre à jour le rect et les "feet"
+        self.rect.center = self.position
         self.feet.midbottom = self.rect.midbottom
 
-        # Rotation nette avec pré-zoom
-        rotated_image = pygame.transform.rotozoom(self.zoomed_image, -self.angle + 90, 1)
+        # Mettre à jour l'image selon l'angle le plus proche
+        nearest_angle = round(self.angle / 15) * 15 % 360
+        self.image = self.images[nearest_angle]
+        self.rect = self.image.get_rect(center=self.rect.center)
 
-        # Ajuster le rect pour que l'affichage soit centré
-        self.rect = rotated_image.get_rect(center=self.rect.center)
-        self.image = rotated_image
-
+    # Revenir en arrière (collision ou reset)
     def move_back(self):
         self.position = self.old_position.copy()
-        self.rect.topleft = self.position
+        self.rect.center = self.position
         self.feet.midbottom = self.rect.midbottom
 
-    def get_image(self, x, y):
-        # Extraire image avec alpha
-        image = pygame.Surface([32, 32], pygame.SRCALPHA)
-        car_rect = pygame.Rect(16, 0, 16, 16)
-        image.blit(self.sprite_sheet, (0, 0), (x, y, 32, 32))
-        return image
+    # DRS
+    def activate_drs(self):
+        self.drs_active = True
+        self.max_speed = self.drs_speed
+
+    def deactivate_drs(self):
+        self.drs_active = False
+        self.max_speed = self.normal_speed
+
+    # Météo
+    def apply_weather(self, rain_active):
+        if rain_active:
+            self.max_speed = self.normal_speed - self.rain_penalty
+        else:
+            self.max_speed = self.normal_speed
+
+        # si DRS actif, il écrase la limite pluie
+        if self.drs_active:
+            self.max_speed = self.drs_speed
