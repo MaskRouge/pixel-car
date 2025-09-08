@@ -6,7 +6,7 @@ import sys
 from rain import RainDrop
 import time
 import random
-from ai_player import AIPlayer
+
 
 
 
@@ -35,16 +35,6 @@ class Game:
         self.player = Player(player_position.x, player_position.y)
         self.group.add(self.player)
 
-        # Ajouter 3 voitures IA avec l'image du joueur
-        self.ai_cars = [
-            AIPlayer(player_position.x + 100 * i,
-                     player_position.y + 50 * i,
-                     player_image=self.player.original_image)  # passer l'image
-            for i in range(3)
-        ]
-
-        for ai in self.ai_cars:
-            self.group.add(ai)
 
         # Zones
         self.walls = []
@@ -166,24 +156,7 @@ class Game:
         # Appliquer météo sur la voiture
         self.player.apply_weather(self.rain_enabled)
 
-        # Collisions IA <-> murs
-        for ai in self.ai_cars:
-            if ai.feet.collidelist(self.walls) > -1:
-                ai.move_back()
 
-        # Collisions Joueur <-> IA
-        for ai in self.ai_cars:
-            if self.player.rect.colliderect(ai.rect):
-                # Les repousser légèrement
-                self.player.move_back()
-                ai.move_back()
-
-        # Collisions entre IA
-        for i, ai1 in enumerate(self.ai_cars):
-            for ai2 in self.ai_cars[i + 1:]:
-                if ai1.rect.colliderect(ai2.rect):
-                    ai1.move_back()
-                    ai2.move_back()
 
     # Dessiner la pluie
     def draw_rain(self):
