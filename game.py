@@ -7,10 +7,6 @@ from rain import RainDrop
 import time
 import random
 
-
-
-
-
 class Game:
 
     def __init__(self):
@@ -42,6 +38,7 @@ class Game:
         self.sand_zones = []
         self.grass_zones = []
         self.drs_zones = []
+        self.pit_zones = []  # 🚩 zones pit stop
 
         for obj in self.tmx_data.objects:
             if obj.type == 'collision':
@@ -54,6 +51,8 @@ class Game:
                 self.grass_zones.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
             elif obj.type == 'drs':
                 self.drs_zones.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
+            elif obj.type == 'pit':  # 🚩 ajout zone pit stop
+                self.pit_zones.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
 
         # Chronomètre
         self.start_ticks = pygame.time.get_ticks()
@@ -86,12 +85,24 @@ class Game:
                     if tile_image:
                         self.minimap_tiles.blit(tile_image, (x * self.tmx_data.tilewidth, y * self.tmx_data.tileheight))
 
+        # Pit stop
+        self.in_pit = False
+        self.pit_start_time = 0
+        self.pit_duration = 0
+        self.pit_finished = False
+        self.pit_go_time = 0  # moment où le pit s'est terminé
+
         # Pluie aléatoire par partie
         self.rain_enabled = random.choice([True, False])
         self.rain_drops = [RainDrop(1920, 1080) for _ in range(150)]
 
     # Gestion des touches
     def handle_input(self):
+        # Si on est en pit stop, on bloque les mouvements
+        if self.in_pit:
+            self.player.velocity = 0
+            return
+
         pressed = pygame.key.get_pressed()
         if pressed[pygame.K_z]:
             self.player.move_forward()
@@ -102,11 +113,20 @@ class Game:
         if pressed[pygame.K_d]:
             self.player.turn_right()
 
+        # DRS
         in_drs_zone = any(self.player.feet.colliderect(zone) for zone in self.drs_zones)
         if in_drs_zone and pressed[pygame.K_SPACE]:
             self.player.activate_drs()
         else:
             self.player.deactivate_drs()
+
+        # Pit stop : déclenche seulement si on est dans la zone pit et pas déjà en pit
+        in_pit_zone = any(self.player.feet.colliderect(zone) for zone in self.pit_zones)
+        if in_pit_zone and pressed[pygame.K_p] and not self.in_pit:
+            self.in_pit = True
+            self.pit_finished = False
+            self.pit_start_time = pygame.time.get_ticks()
+            self.pit_duration = random.randint(1800, 3000)  # 1.8 à 3 secondes
 
     # Mise à jour du jeu
     def update(self):
@@ -115,9 +135,29 @@ class Game:
         for sprite in self.group.sprites():
             sprite.save_position()
 
-            if sprite.feet.collidelist(self.walls) > -1:
-                sprite.move_back()
+            # Collision avec murs
+            for wall in self.walls:
+                if sprite.feet.colliderect(wall):
+                    # Collision horizontale
+                    if sprite.rect.right > wall.left and sprite.rect.left < wall.left and sprite.velocity_x > 0:
+                        sprite.rect.right = wall.left
+                        sprite.velocity_x = 0
+                    if sprite.rect.left < wall.right and sprite.rect.right > wall.right and sprite.velocity_x < 0:
+                        sprite.rect.left = wall.right
+                        sprite.velocity_x = 0
 
+                    # Collision verticale
+                    if sprite.rect.bottom > wall.top and sprite.rect.top < wall.top and sprite.velocity_y > 0:
+                        sprite.rect.bottom = wall.top
+                        sprite.velocity_y = 0
+                    if sprite.rect.top < wall.bottom and sprite.rect.bottom > wall.bottom and sprite.velocity_y < 0:
+                        sprite.rect.top = wall.bottom
+                        sprite.velocity_y = 0
+
+                    # Repositionner les "feet" après collision
+                    sprite.feet.topleft = (sprite.rect.x, sprite.rect.y + sprite.rect.height * 0.75)
+
+            # --- Zones ---
             for zone in self.chrono_zones:
                 if sprite.feet.colliderect(zone):
                     if not sprite.in_chrono_zone:
@@ -129,34 +169,43 @@ class Game:
                 else:
                     sprite.in_chrono_zone = False
 
-            in_sand_zone = False
-            in_grass_zone = False
-            for zone in self.sand_zones:
-                if sprite.feet.colliderect(zone):
-                    sprite.friction = 0.15
-                    in_sand_zone = True
-                    break
-            if not in_sand_zone:
-                for zone in self.grass_zones:
-                    if sprite.feet.colliderect(zone):
-                        sprite.friction = 0.08
-                        in_grass_zone = True
-                        break
-            if not in_sand_zone and not in_grass_zone:
+            # Friction zones
+            in_sand_zone = any(sprite.feet.colliderect(z) for z in self.sand_zones)
+            in_grass_zone = any(sprite.feet.colliderect(z) for z in self.grass_zones)
+
+            if in_sand_zone:
+                sprite.friction = 0.15
+            elif in_grass_zone:
+                sprite.friction = 0.08
+            else:
                 sprite.friction = 0.05
 
+            # --- Rotation ---
             sprite.image = pygame.transform.rotate(sprite.original_image, -sprite.angle)
             sprite.rect = sprite.image.get_rect(center=sprite.rect.center)
 
-        # Pluie
+            # --- Mettre à jour feet après rotation ---
+            sprite.feet.topleft = (sprite.rect.x, sprite.rect.y + sprite.rect.height * 0.75)
+            sprite.feet.size = (sprite.rect.width, sprite.rect.height * 0.25)
+
+        # --- Pluie ---
         if self.rain_enabled:
             for drop in self.rain_drops:
                 drop.fall()
 
-        # Appliquer météo sur la voiture
+        # --- Météo et pneus ---
         self.player.apply_weather(self.rain_enabled)
+        self.player.update_tyres()
 
-
+        # --- Gestion du pit stop ---
+        if self.in_pit:
+            elapsed = pygame.time.get_ticks() - self.pit_start_time
+            if elapsed >= self.pit_duration:
+                # Pit terminé : remise à neuf des pneus
+                self.player.pit_stop(self.player.tyre_type)
+                self.in_pit = False
+                self.pit_finished = True
+                self.pit_go_time = pygame.time.get_ticks()  # sauvegarde du moment de fin
 
     # Dessiner la pluie
     def draw_rain(self):
@@ -208,29 +257,77 @@ class Game:
         last_timer_text = self.font.render(last_time_string, True, (255, 255, 255))
         self.screen.blit(last_timer_text, (10, 90))
 
-    # HUD bas-centre
     def display_dashboard(self):
         screen_width, screen_height = self.screen.get_size()
         dashboard_height = 80
         dashboard_y = screen_height - dashboard_height
+
+        # Fond semi-transparent pour la barre d’infos
         dashboard_bg = pygame.Surface((screen_width, dashboard_height), pygame.SRCALPHA)
         dashboard_bg.fill((0, 0, 0, 150))
         self.screen.blit(dashboard_bg, (0, dashboard_y))
 
-        speed_kmh = int(self.player.velocity / self.player.max_speed * (360 if self.player.drs_active else 340))
-        speed_text = self.font.render(f"Speed: {speed_kmh} km/h", True, (255, 255, 255))
+        # --- Vitesse ---
+        # On définit la vitesse max fixe pour l'affichage
+        MAX_SPEED_NORMAL = 340
+        MAX_SPEED_DRS = 360
 
         if self.player.drs_active:
-            drs_text = self.font.render("DRS: ACTIVE", True, (0, 255, 0))
+            # Ratio par rapport à la vitesse DRS théorique
+            speed_ratio = min(self.player.velocity / self.player.drs_speed, 1.0)
+            speed_kmh = int(speed_ratio * MAX_SPEED_DRS)
+        else:
+            # Ratio par rapport à la vitesse normale théorique
+            speed_ratio = min(self.player.velocity / self.player.normal_speed, 1.0)
+            speed_kmh = int(speed_ratio * MAX_SPEED_NORMAL)
+
+        speed_text = self.font.render(f"{speed_kmh} km/h", True, (255, 255, 255))
+        speed_rect = speed_text.get_rect(center=(100, screen_height - 40))
+        self.screen.blit(speed_text, speed_rect)
+
+        # --- DRS ---
+        if self.player.drs_active:
+            drs_text = self.font.render("DRS", True, (0, 255, 0))
         else:
             in_drs_zone = any(self.player.feet.colliderect(zone) for zone in self.drs_zones)
-            drs_text = self.font.render("DRS: READY" if in_drs_zone else "DRS: OFF", True,
-                                        (255, 255, 0) if in_drs_zone else (255, 0, 0))
-
-        speed_rect = speed_text.get_rect(center=(screen_width // 2, dashboard_y + 25))
-        drs_rect = drs_text.get_rect(center=(screen_width // 2, dashboard_y + 55))
-        self.screen.blit(speed_text, speed_rect)
+            color = (255, 255, 0) if in_drs_zone else (255, 0, 0)
+            drs_text = self.font.render("DRS", True, color)
+        drs_rect = drs_text.get_rect(center=(screen_width // 2, screen_height - 40))
         self.screen.blit(drs_text, drs_rect)
+
+        # --- Pneus façon F1 ---
+        tyre_positions = {
+            "FL": (screen_width - 150, screen_height - 120),
+            "FR": (screen_width - 60, screen_height - 120),
+            "RL": (screen_width - 150, screen_height - 60),
+            "RR": (screen_width - 60, screen_height - 60),
+        }
+
+        def get_tyre_color(wear):
+            if wear > 60:
+                return (0, 255, 0)  # vert
+            elif wear > 30:
+                return (255, 165, 0)  # orange
+            else:
+                return (255, 0, 0)  # rouge
+
+        for label, pos in tyre_positions.items():
+            wear = int(self.player.tyres.get(label, 0))
+            color = get_tyre_color(wear)
+
+            # Cercle du pneu
+            pygame.draw.circle(self.screen, color, pos, 25)
+            pygame.draw.circle(self.screen, (0, 0, 0), pos, 25, 3)
+
+            # Texte usure %
+            wear_text = self.font.render(f"{wear}%", True, (255, 255, 255))
+            wear_rect = wear_text.get_rect(center=pos)
+            self.screen.blit(wear_text, wear_rect)
+
+            # Label pneu
+            label_text = self.font.render(label, True, (255, 255, 255))
+            label_rect = label_text.get_rect(center=(pos[0], pos[1] + 35))
+            self.screen.blit(label_text, label_rect)
 
     # Mini-carte
     def draw_minimap(self):
@@ -278,6 +375,25 @@ class Game:
                     pygame.quit()
                     sys.exit()
 
+    def draw_pit_stop(self):
+        screen_width, screen_height = self.screen.get_size()
+        center = (screen_width // 2, screen_height // 2)
+        font = pygame.font.Font(None, 100)
+
+        if self.in_pit:
+            remaining = max(0, (self.pit_duration - (pygame.time.get_ticks() - self.pit_start_time)) / 1000)
+            text_surface = font.render(f"{remaining:.1f}s", True, (255, 255, 0))
+            rect = text_surface.get_rect(center=center)
+            self.screen.blit(text_surface, rect)
+        elif self.pit_finished:
+            # Affiche GO! seulement 1 seconde après la fin du pit
+            if pygame.time.get_ticks() - self.pit_go_time <= 1000:
+                text_surface = font.render("GO!", True, (0, 255, 0))
+                rect = text_surface.get_rect(center=center)
+                self.screen.blit(text_surface, rect)
+            else:
+                self.pit_finished = False  # supprime GO! après 1 sec
+
     # Boucle principale
     def run(self):
         clock = pygame.time.Clock()
@@ -302,13 +418,15 @@ class Game:
                 self.group.center(self.player.rect.center)
                 self.group.draw(self.screen)
                 self.draw_rain()
-                self.draw_weather()  # <-- affichage météo
+                self.draw_weather()
                 self.display_timer()
                 self.display_best_time()
                 self.display_last_time()
                 self.display_dashboard()
                 self.draw_minimap()
+                self.draw_pit_stop()
                 pygame.display.flip()
+
             else:
                 self.draw_pause_menu()
 
